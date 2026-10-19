@@ -1,0 +1,20 @@
+{
+    "com.client.appA": "Cellebrite UFED Client App",
+    "com.oxygen.forensicagent": "Oxygen Android Agent",
+    "com.compelson.mefconnector": "Compelson MOBILedit Connector",
+    "com.magnetforensics.acquire": "MAGNET Acquire",
+    "com.magnetforensics.lplus": "MAGNET Graykey/Verakey (Logical+)",
+    "example.helloandroid": "MSAB XRY Agent",
+    "belkasoft.backup.agent": "Belkasoft Android Agent",
+    "com.belkasoft.sdcardagent": "Belkasoft SDCard Agent",
+    "com.viaforensics.android.aflogical_ose": "viaForensics AFLogical OSE",
+    "com.viaforensics.android.aflogical": "viaForensics AFLogical",
+    "com.hancomgmd.systeminforeader": "GMDSOFT MD-NEXT Systeminfo Reader",
+    "com.gmdsystem.mdlivecontentreader": "GMDSOFT MD-LIVE Content Reader 1",
+    "com.hancomgmd.mdlivecontentreader": "GMDSOFT MD-LIVE Content Reader 2",
+    "com.gmdsoft.mdcontentreader": "GMDSOFT MD-LIVE Content Reader 3",
+    "com.xly.spfsocket": "SalvationDATA SmartPhone Forensic System Pro",
+    "com.adfsolutions.intex": "ADF Solulions ADF Pro Client",
+    "com.alias.connector": "Avilla Forensics",
+    "dev.alex.cve_2024_0044": "ALEX CVE-2024-0044 Dummy App"
+}

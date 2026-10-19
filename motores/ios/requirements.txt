@@ -1,0 +1,17 @@
+construct-typing==0.7.0
+crossfiledialog
+customtkinter
+exifread<3
+imagehash
+iOSbackup
+NSKeyedUnArchiver==1.5
+pandas
+paramiko
+pdfme==0.4.12
+pyarrow
+pyiosbackup
+pymobiledevice3==7.8.3
+pmd-pytcp==0.3.7
+pywin32; sys_platform == "win32"
+simpleaudio-patched
+tkcalendar

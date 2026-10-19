@@ -1,0 +1,15 @@
+{
+  "UFADE": {
+    "repositorio": "https://github.com/prosch88/UFADE",
+    "commit": "5b5653cda08cbf83f6d16af814d657587159e7ca",
+    "data_commit": "2026-10-14T09:30:20+02:00",
+    "obtido_em": "2026-10-14",
+    "submodulo_ufade_developer": "a621a3363d133a8b95ad8aaa2062a3b7150d4394"
+  },
+  "ALEX": {
+    "repositorio": "https://github.com/prosch88/ALEX",
+    "commit": "4790ab34d66b68e6d78e48a7bc86f9d70e59bffd",
+    "data_commit": "2026-10-13T07:26:19+02:00",
+    "obtido_em": "2026-10-14"
+  }
+}

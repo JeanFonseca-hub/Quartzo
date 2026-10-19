@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+motores/ios/ufade_developer/
+Quartzo_extracoes/
+_diag/
+*.log
