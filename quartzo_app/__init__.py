@@ -11,7 +11,7 @@ Free Software Foundation. Distribuído SEM QUALQUER GARANTIA. Veja LICENSE.
 """
 import os as _os
 
-VERSAO = "1.0.0"
+VERSAO = "1.0.1"
 ICONE_ICO = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "recursos", "quartzo.ico")
 ICONE_PNG = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "recursos", "quartzo.png")
 NOME = "Quartzo"
