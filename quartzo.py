@@ -955,7 +955,8 @@ class Lancador(ctk.CTk):
                 "Atualização dos motores",
                 "Não foi possível concluir a atualização. Causas comuns: sem conexão com a internet, Git "
                 "ausente, ou o autor original alterou um trecho em que o Quartzo faz ajuste de integração "
-                "(nesse caso, nada em motores/ é sobrescrito).\n\n" + (trecho or ""))
+                "(nesse caso, os motores em uso e o código original em upstream/ não são alterados).\n\n"
+                + (trecho or ""))
 
     def ao_fechar(self):
         if self.processo is not None:

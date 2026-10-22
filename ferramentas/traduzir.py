@@ -348,49 +348,49 @@ def traduzir_fonte(fonte, ocorrencias, trad, nao_cmp, estat):
     return "".join(linhas)
 
 
-def cmd_aplicar(motor, verbose=True):
+def gerar(motor, verbose=True):
+    """Monta o motor traduzido e integrado numa pasta de trabalho ao lado da pasta
+    em uso (motores/<destino>_novo) e devolve (pasta_de_trabalho, estatísticas).
+
+    A pasta em uso não é tocada aqui. Se a tradução ou a integração falhar, a
+    pasta de trabalho é apagada e o erro segue para quem chamou; o motor em uso
+    continua o mesmo. A troca é feita depois, por instalar()."""
     cfg = MOTORES[motor]
     d = carregar_dicionario(motor)
     trad = {k: v for k, v in d["traducoes"].items() if v}
     nao_cmp = set(d["nao_traduzir_cmp"])
-    destino = cfg["destino"]
-    # preserva as DeveloperDiskImages já baixadas (motores/ios/ufade_developer)
-    dev_img = os.path.join(destino, "ufade_developer")
-    guardado = None
-    if os.path.isdir(dev_img) and os.listdir(dev_img):
-        guardado = destino + "_ufade_developer_tmp"
-        shutil.move(dev_img, guardado)
-    if os.path.exists(destino):
-        shutil.rmtree(destino)
-    shutil.copytree(cfg["origem"], destino,
+    trabalho = cfg["destino"] + "_novo"
+    if os.path.exists(trabalho):
+        shutil.rmtree(trabalho)  # sobra de uma geração interrompida
+    shutil.copytree(cfg["origem"], trabalho,
                     ignore=shutil.ignore_patterns(".git", "__pycache__"))
-    if guardado:
-        if os.path.isdir(dev_img):
-            shutil.rmtree(dev_img)
-        shutil.move(guardado, dev_img)
     estat = {"traduzidas": 0, "preservadas": []}
-    # Se uma string traduzível também é usada como DADO em qualquer ponto do
-    # motor (ex.: doc_list.append("yes") ... if doc_list[i] == "yes"), as
-    # comparações com ela não podem ser traduzidas.
-    analises = {arq: analisar(arq) for arq in arquivos_motor(motor)}
-    for _, ocs in analises.values():
-        for o in ocs:
-            if o["conteudo"] in trad and o["ctx"] not in ("UI", "CMP", "LOG"):
-                nao_cmp.add(o["conteudo"])
-    for arq in arquivos_motor(motor):
-        fonte, ocs = analises[arq]
-        nova = traduzir_fonte(fonte, ocs, trad, nao_cmp, estat)
-        # verificação de equivalência estrutural
-        a1 = _normalizar_ast(ast.parse(fonte))
-        a2 = _normalizar_ast(ast.parse(nova))
-        if a1 != a2:
-            raise SystemExit(f"ERRO: estrutura do código alterada em {arq}")
-        rel = os.path.relpath(arq, cfg["origem"])
-        with open(os.path.join(destino, rel), "w", encoding="utf-8", newline="") as fh:
-            fh.write(nova)
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import integrar
-    n_aj = integrar.aplicar(motor, destino)
+    try:
+        # Se uma string traduzível também é usada como DADO em qualquer ponto do
+        # motor (ex.: doc_list.append("yes") ... if doc_list[i] == "yes"), as
+        # comparações com ela não podem ser traduzidas.
+        analises = {arq: analisar(arq) for arq in arquivos_motor(motor)}
+        for _, ocs in analises.values():
+            for o in ocs:
+                if o["conteudo"] in trad and o["ctx"] not in ("UI", "CMP", "LOG"):
+                    nao_cmp.add(o["conteudo"])
+        for arq in arquivos_motor(motor):
+            fonte, ocs = analises[arq]
+            nova = traduzir_fonte(fonte, ocs, trad, nao_cmp, estat)
+            # verificação de equivalência estrutural
+            a1 = _normalizar_ast(ast.parse(fonte))
+            a2 = _normalizar_ast(ast.parse(nova))
+            if a1 != a2:
+                raise SystemExit(f"ERRO: estrutura do código alterada em {arq}")
+            rel = os.path.relpath(arq, cfg["origem"])
+            with open(os.path.join(trabalho, rel), "w", encoding="utf-8", newline="") as fh:
+                fh.write(nova)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import integrar
+        n_aj = integrar.aplicar(motor, trabalho)
+    except BaseException:
+        shutil.rmtree(trabalho, ignore_errors=True)
+        raise
     if verbose:
         print(f"[{motor}] ajustes de integração aplicados: {n_aj}")
         print(f"[{motor}] strings substituídas: {estat['traduzidas']}")
@@ -400,6 +400,45 @@ def cmd_aplicar(motor, verbose=True):
         print(f"[{motor}] comparações traduzidas junto com a interface: {len(estat.get('cmp', []))}")
         for c, ln in estat.get("cmp", []):
             print(f"    linha {ln:5d} CMP   {c[:60]!r}")
+    return trabalho, estat
+
+
+def instalar(motor, trabalho):
+    """Põe o motor montado em `trabalho` no lugar do motor em uso.
+
+    O motor em uso é renomeado para <destino>_antigo, o novo assume o nome e só
+    então o antigo é apagado; se a troca falhar, o antigo volta ao lugar. As
+    DeveloperDiskImages do iOS (ufade_developer), baixadas à parte, passam do
+    motor antigo para o novo."""
+    destino = MOTORES[motor]["destino"]
+    antigo = destino + "_antigo"
+    if os.path.exists(antigo):
+        shutil.rmtree(antigo)
+    if os.path.exists(destino):
+        os.rename(destino, antigo)
+    try:
+        os.rename(trabalho, destino)
+    except OSError:
+        if os.path.isdir(antigo) and not os.path.exists(destino):
+            os.rename(antigo, destino)
+        raise
+    dev_antigo = os.path.join(antigo, "ufade_developer")
+    if os.path.isdir(dev_antigo) and os.listdir(dev_antigo):
+        dev_novo = os.path.join(destino, "ufade_developer")
+        if os.path.isdir(dev_novo):
+            shutil.rmtree(dev_novo)
+        shutil.move(dev_antigo, dev_novo)
+    shutil.rmtree(antigo, ignore_errors=True)
+
+
+def descartar(motor):
+    """Apaga a pasta de trabalho de uma geração que não vai ser instalada."""
+    shutil.rmtree(MOTORES[motor]["destino"] + "_novo", ignore_errors=True)
+
+
+def cmd_aplicar(motor, verbose=True):
+    trabalho, estat = gerar(motor, verbose)
+    instalar(motor, trabalho)
     return estat
 
 

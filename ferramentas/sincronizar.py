@@ -11,8 +11,10 @@ Passos:
  3. regenera motores/ios e motores/android (tradução + integração);
  4. lista as strings NOVAS de interface ainda sem tradução;
  5. regenera integridade.json.
-Se algum ajuste de integração não encontrar o trecho esperado (porque o autor
-mudou o código), o processo para com erro e nada é sobrescrito em motores/.
+Os dois motores são montados em pastas de trabalho e só tomam o lugar dos atuais
+depois que ambos terminam sem erro. Se algum ajuste de integração não encontrar
+o trecho esperado (porque o autor mudou o código), ou se o download falhar, o
+processo para com erro, upstream/ volta ao que era e motores/ não é alterado.
 """
 import io
 import json
@@ -66,27 +68,53 @@ def main():
     offline = "--offline" in sys.argv
     arq_origem = os.path.join(RAIZ, "upstream", "ORIGEM.json")
     origem = json.load(open(arq_origem, encoding="utf-8")) if os.path.exists(arq_origem) else {}
-    if not offline:
-        tmp = tempfile.mkdtemp(prefix="quartzo_sync_")
-        try:
+    tmp = tempfile.mkdtemp(prefix="quartzo_sync_")
+    trocados = []  # originais substituídos em upstream/; a versão anterior fica em upstream/_<nome>_anterior
+    gerados = []   # (motor, pasta de trabalho) já montados e ainda não instalados
+    try:
+        if not offline:
             for nome, url in REPOS.items():
                 print(f"Baixando {nome}...")
                 pasta, commit, data = baixar(nome, url, tmp)
                 antigo = origem.get(nome, {}).get("commit", "")
                 print(f"  commit {commit[:12]} ({data})" + ("  [sem mudanças]" if commit == antigo else ""))
                 dest = os.path.join(RAIZ, "upstream", nome)
+                anterior = os.path.join(RAIZ, "upstream", f"_{nome}_anterior")
+                if os.path.exists(anterior):
+                    shutil.rmtree(anterior)
                 if os.path.exists(dest):
-                    shutil.rmtree(dest)
+                    os.rename(dest, anterior)
+                trocados.append(nome)
                 shutil.copytree(pasta, dest)
                 origem.setdefault(nome, {}).update({"repositorio": url, "commit": commit,
                                                     "data_commit": data, "obtido_em": date.today().isoformat()})
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        # Os dois motores são montados antes de qualquer troca: se um falhar,
+        # nenhum dos dois muda.
+        for motor in ("ufade", "alex"):
+            print(f"\nRegenerando motor {motor}...")
+            trabalho, _ = traduzir.gerar(motor, verbose=False)
+            gerados.append((motor, trabalho))
+    except BaseException:
+        for motor, _ in gerados:
+            traduzir.descartar(motor)
+        for nome in trocados:
+            dest = os.path.join(RAIZ, "upstream", nome)
+            anterior = os.path.join(RAIZ, "upstream", f"_{nome}_anterior")
+            shutil.rmtree(dest, ignore_errors=True)
+            if os.path.isdir(anterior):
+                os.rename(anterior, dest)
+        print("\nAtualização interrompida: upstream/ voltou ao que era e os motores em uso não foram alterados.",
+              file=sys.stderr)
+        raise
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    for nome in trocados:
+        shutil.rmtree(os.path.join(RAIZ, "upstream", f"_{nome}_anterior"), ignore_errors=True)
+    if not offline:
         with open(arq_origem, "w", encoding="utf-8") as fh:
             json.dump(origem, fh, indent=2, ensure_ascii=False)
-    for motor in ("ufade", "alex"):
-        print(f"\nRegenerando motor {motor}...")
-        traduzir.cmd_aplicar(motor, verbose=False)
+    for motor, trabalho in gerados:
+        traduzir.instalar(motor, trabalho)
         traduzir.cmd_relatorio(motor)
     subprocess.run([sys.executable, os.path.join(RAIZ, "ferramentas", "gerar_integridade.py")],
                    check=True, creationflags=_SEM_JANELA)

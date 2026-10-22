@@ -15,6 +15,7 @@ sys.path.insert(0, RAIZ)
 sys.path.insert(0, os.path.join(RAIZ, "ferramentas"))
 from quartzo_app import correcoes_ufade as qc  # noqa: E402
 import integrar  # noqa: E402
+import traduzir  # noqa: E402
 
 
 class Var:
@@ -220,6 +221,53 @@ class TesteIntegrar(unittest.TestCase):
     def test_padrao_nao_casa_indentacao_diferente(self):
         p = integrar._padrao("\n    log(x)\n")
         self.assertEqual(len(p.findall("\n        log(x)\n")), 0)
+
+
+class TesteGeracaoDosMotores(unittest.TestCase):
+    """O motor em uso só é trocado quando tradução e integração terminam sem erro."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="quartzo_teste_")
+        self.origem = os.path.join(self.dir, "upstream", "UFADE")
+        self.destino = os.path.join(self.dir, "motores", "ios")
+        os.makedirs(self.origem)
+        os.makedirs(os.path.join(self.destino, "ufade_developer", "Developer"))
+        self.gravar(os.path.join(self.origem, "ufade.py"), 'x = "versao nova"\n')
+        self.gravar(os.path.join(self.destino, "ufade.py"), 'x = "versao em uso"\n')
+        self.gravar(os.path.join(self.destino, "ufade_developer", "Developer", "imagem"), "imagem")
+        self.motores_antes = traduzir.MOTORES
+        self.aplicar_antes = integrar.aplicar
+        traduzir.MOTORES = {"ufade": {"origem": self.origem, "destino": self.destino, "principal": "ufade.py"}}
+
+    def tearDown(self):
+        traduzir.MOTORES = self.motores_antes
+        integrar.aplicar = self.aplicar_antes
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    @staticmethod
+    def gravar(caminho, texto):
+        with open(caminho, "w", encoding="utf-8") as fh:
+            fh.write(texto)
+
+    def ler_motor(self):
+        with open(os.path.join(self.destino, "ufade.py"), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_falha_na_integracao_preserva_o_motor_em_uso(self):
+        def falha(motor, destino):
+            raise SystemExit("ERRO de integração: trecho esperado não encontrado")
+        integrar.aplicar = falha
+        with self.assertRaises(SystemExit):
+            traduzir.cmd_aplicar("ufade", verbose=False)
+        self.assertEqual(self.ler_motor(), 'x = "versao em uso"\n')
+        self.assertEqual(os.listdir(os.path.dirname(self.destino)), ["ios"])  # sem sobras _novo/_antigo
+
+    def test_geracao_completa_troca_o_motor_e_mantem_as_imagens(self):
+        integrar.aplicar = lambda motor, destino: 0
+        traduzir.cmd_aplicar("ufade", verbose=False)
+        self.assertEqual(self.ler_motor(), 'x = "versao nova"\n')
+        self.assertTrue(os.path.isfile(os.path.join(self.destino, "ufade_developer", "Developer", "imagem")))
+        self.assertEqual(os.listdir(os.path.dirname(self.destino)), ["ios"])
 
 
 if __name__ == "__main__":

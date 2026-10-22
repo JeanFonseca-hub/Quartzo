@@ -10,7 +10,7 @@ if errorlevel 1 (
   exit /b 1
 )
 if exist "ufade_developer\Developer" (
-  echo Imagens ja presentes em motores\ios﫞_developer
+  echo Imagens ja presentes em motores\ios\ufade_developer
   pause
   exit /b 0
 )
