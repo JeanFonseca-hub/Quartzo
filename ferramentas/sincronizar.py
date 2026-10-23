@@ -20,6 +20,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,39 @@ REPOS = {"UFADE": "https://github.com/prosch88/UFADE", "ALEX": "https://github.c
 _SEM_JANELA = 0x08000000 if (os.name == "nt" and os.environ.get("QUARTZO_SILENCIOSO") == "1") else 0
 
 
+def apagar(caminho):
+    """Apaga uma pasta inteira, inclusive os arquivos somente leitura.
+
+    No Windows o Git grava os pacotes de objetos (.git/objects/pack) como
+    somente leitura, e o shutil.rmtree desiste deles. Aqui o atributo é retirado
+    e a remoção é repetida; se mesmo assim algo ficar para trás, o erro sobe,
+    em vez de passar em silêncio."""
+    def liberar(funcao, alvo, _erro):
+        os.chmod(alvo, stat.S_IWRITE)
+        funcao(alvo)
+    if os.path.lexists(caminho):
+        shutil.rmtree(caminho, onerror=liberar)
+
+
+def restaurar_upstream(nomes):
+    """Devolve a upstream/ as versões guardadas em upstream/_<nome>_anterior.
+
+    Cada original é restaurado por conta própria: um erro no UFADE não impede a
+    restauração do ALEX, e vice-versa. Devolve a lista de falhas (vazia quando
+    tudo voltou ao lugar)."""
+    falhas = []
+    for nome in nomes:
+        dest = os.path.join(RAIZ, "upstream", nome)
+        anterior = os.path.join(RAIZ, "upstream", f"_{nome}_anterior")
+        try:
+            apagar(dest)
+            if os.path.isdir(anterior):
+                os.rename(anterior, dest)
+        except OSError as erro:
+            falhas.append(f"{nome}: {erro}")
+    return falhas
+
+
 def baixar(nome, url, destino_tmp):
     alvo = os.path.join(destino_tmp, nome)
     if shutil.which("git"):
@@ -48,7 +82,7 @@ def baixar(nome, url, destino_tmp):
                                          creationflags=_SEM_JANELA).strip()
         data = subprocess.check_output(["git", "-C", alvo, "log", "-1", "--format=%cI"], text=True,
                                        creationflags=_SEM_JANELA).strip()
-        shutil.rmtree(os.path.join(alvo, ".git"), ignore_errors=True)
+        apagar(os.path.join(alvo, ".git"))
         return alvo, commit, data
     api = url.replace("https://github.com/", "https://api.github.com/repos/") + "/commits/HEAD"
     with urllib.request.urlopen(api, timeout=60) as r:
@@ -80,12 +114,12 @@ def main():
                 print(f"  commit {commit[:12]} ({data})" + ("  [sem mudanças]" if commit == antigo else ""))
                 dest = os.path.join(RAIZ, "upstream", nome)
                 anterior = os.path.join(RAIZ, "upstream", f"_{nome}_anterior")
-                if os.path.exists(anterior):
-                    shutil.rmtree(anterior)
+                apagar(anterior)
                 if os.path.exists(dest):
                     os.rename(dest, anterior)
                 trocados.append(nome)
-                shutil.copytree(pasta, dest)
+                # .git fica de fora mesmo que algo tenha escapado da limpeza em baixar()
+                shutil.copytree(pasta, dest, ignore=shutil.ignore_patterns(".git"))
                 origem.setdefault(nome, {}).update({"repositorio": url, "commit": commit,
                                                     "data_commit": data, "obtido_em": date.today().isoformat()})
         # Os dois motores são montados antes de qualquer troca: se um falhar,
@@ -97,19 +131,26 @@ def main():
     except BaseException:
         for motor, _ in gerados:
             traduzir.descartar(motor)
-        for nome in trocados:
-            dest = os.path.join(RAIZ, "upstream", nome)
-            anterior = os.path.join(RAIZ, "upstream", f"_{nome}_anterior")
-            shutil.rmtree(dest, ignore_errors=True)
-            if os.path.isdir(anterior):
-                os.rename(anterior, dest)
-        print("\nAtualização interrompida: upstream/ voltou ao que era e os motores em uso não foram alterados.",
-              file=sys.stderr)
+        falhas = restaurar_upstream(trocados)
+        if falhas:
+            print("\nAtualização interrompida. Os motores em uso não foram alterados, mas upstream/ não voltou "
+                  "por completo ao que era:\n  " + "\n  ".join(falhas) +
+                  "\nA versão anterior continua em upstream/_<nome>_anterior. Feche o Quartzo e, na pasta "
+                  "do programa, execute: git checkout -- upstream", file=sys.stderr)
+        else:
+            print("\nAtualização interrompida: upstream/ voltou ao que era e os motores em uso não foram "
+                  "alterados.", file=sys.stderr)
         raise
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            apagar(tmp)
+        except OSError:
+            pass  # sobra na pasta temporária do Windows; não afeta o Quartzo
     for nome in trocados:
-        shutil.rmtree(os.path.join(RAIZ, "upstream", f"_{nome}_anterior"), ignore_errors=True)
+        try:
+            apagar(os.path.join(RAIZ, "upstream", f"_{nome}_anterior"))
+        except OSError as erro:
+            print(f"Aviso: não foi possível apagar upstream/_{nome}_anterior ({erro}); apague-a à mão.")
     if not offline:
         with open(arq_origem, "w", encoding="utf-8") as fh:
             json.dump(origem, fh, indent=2, ensure_ascii=False)

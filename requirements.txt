@@ -1,4 +1,4 @@
-# Quartzo 1.0.1 - dependencias congeladas (lockfile)
+# Quartzo 1.0.2 - dependencias congeladas (lockfile)
 # Versoes exatas usadas e testadas em Windows com Python 3.11, obtidas por
 # "pip freeze" no ambiente de referencia. Reinstale exatamente este conjunto com:
 #     .venv\Scripts\python.exe -m pip install -r requirements.txt

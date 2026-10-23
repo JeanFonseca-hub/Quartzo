@@ -1,6 +1,6 @@
 {
- "versao_quartzo": "1.0.1",
- "gerado_em_utc": "2026-10-22T15:47:29+00:00",
+ "versao_quartzo": "1.0.2",
+ "gerado_em_utc": "2026-10-23T21:22:54+00:00",
  "algoritmo": "SHA-256",
  "arquivos": {
   "ATUALIZAR_MOTORES.bat": "baeeee3d2d74f4118b7aa2c9f427146507d2ed2926783d1b291041138a3063e7",
@@ -13,7 +13,7 @@
   "ferramentas/gerar_icone.py": "d20d693d829dd4c6b1d74e8123eb0578fbc3b7b00a652cec74e1bfee3ba85cde",
   "ferramentas/gerar_integridade.py": "1b17531dcc779094124df1ab57cbc55a90defbfa9261e0153e987c457ea00e68",
   "ferramentas/integrar.py": "84f0f0710da036884befb00f544d5e9ae8ae0a8b69c8c0fe6b317dafd104cbf6",
-  "ferramentas/sincronizar.py": "4dfdc250027420268207e39596378b598df6cca999f6aa645d50cbd3c5df809c",
+  "ferramentas/sincronizar.py": "382073f1044a636b80b04f2e9d3e1c13fd262eb22b9fbc96a0b805ed69024626",
   "ferramentas/traduzir.py": "029a601427c940bd1b90664b1406a26893d58730540a09e8925c9a0be8f3254e",
   "i18n/alex.pt_BR.json": "223cd2dad0b172f014ff291a6914d747b15e39304647aa4c6a199460d7c1802b",
   "i18n/comum.pt_BR.json": "216f0b78e111bd8a7ffa1c9990e5681627e1a0def2812032d8394cf79cda24d4",
@@ -75,7 +75,7 @@
   "motores/ios/ufade/linux_dpi.py": "76d49250a4348da44d6fdf7b9af0b5662f8520b9592a51c763efda69857396a4",
   "motores/ios/ufade/userspace_tunnel.py": "6b1c45fd380f763a2aa131f86f2f040fc85ca259c39ded98162a2f0cd55b2262",
   "quartzo.py": "41ad072bf095dea9d42a347bae68ebf6b7cdc1100d9382662305b0ea1bf8ec61",
-  "quartzo_app/__init__.py": "d662258b8dfda0ff7372f973773bbdbc11ccd8167b94453ce7e099ac56439415",
+  "quartzo_app/__init__.py": "1b5929c93af95e525814b98b6f856a9d6bb56b8ed912c18b7fc9f957351a6f06",
   "quartzo_app/acompanhamento.py": "b655e64a9a1addcd4ef56f97c5793d49e76a1d8e30bdcab27a5f0409b31d396d",
   "quartzo_app/correcoes_ufade.py": "99ef3707b0fb34a1d248902e4b21607b21bafdb19c1df40e15ff7e7e158d62f7",
   "quartzo_app/deteccao.py": "dd83b243b1c4430bb5285b734d6618546b05dfdab9830632028bf1f35960bfc3",
@@ -86,11 +86,12 @@
   "quartzo_app/progresso.py": "938cee032e9e0867fde68cff50da02e2f0ecb96515aa0191afa838b99b0c6217",
   "quartzo_app/sonda_progresso.py": "92a070fd6c2264b51a80dfea968387108510a4e2995db5f745453c8d50734846",
   "quartzo_app/whatsapp_cripto.py": "f7e2cc290d7b25779b540a594746f29e5e775fb0dc5753a7c3fdebbc0c7a0fd9",
-  "requirements.txt": "90822ac95ed3cec8814f783033329e9a4b008d42fe7e2b4b21d0492285c19a43",
+  "requirements.txt": "62a2aa9af67b2c93ff9251096c5ccd4f71cde50973a1ab8525572e865c00899f",
   "testes/test_correcoes_ufade.py": "ab292444db406668e41b9a1d9969c812c87e8cf3d1c1729d4c7c67e9ed9e91b5",
   "testes/test_hashes.py": "60d13e5f3b5972e661770f1dc9067c81afed4cb0bd0df2c05dfdeb7cf0737104",
   "testes/test_leitor_zip.py": "0dce96eca3893574575139ca5fba004586dfe2eb9cb2f2222a1869ead34223ed",
   "testes/test_progresso.py": "d1a6ec446100982e161074b2b6b5169e3e077b607cb8e6f810e4585151c6f3ba",
+  "testes/test_sincronizar.py": "0aa73deb7bff4d881e0eb66bbbf7f3da1389ff285f53cb44e69ede31d6096cf6",
   "testes/test_whatsapp_cripto.py": "e12715f696a82a8e00ed2ecacb88a9655d9949a34ac4099948560056cc100457"
  }
 }
