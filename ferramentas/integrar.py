@@ -17,12 +17,14 @@ Integração (UFADE e ALEX):
 Correções do motor iOS (UFADE), a partir do teste de coleta de 16/10/2026.
 O código das correções fica em quartzo_app/correcoes_ufade.py, copiado para
 motores/ios/quartzo_correcoes.py; aqui ficam só os pontos de chamada.
-C1. Descriptografia por registro do Manifest.db (fileID), e não por caminho
-    relativo: o original gravava só a cópia do primeiro app quando o mesmo
-    caminho existia em vários apps, descartava arquivos de tamanho zero e era
-    quadrático no número de arquivos. Afeta Logical+ (TAR), PRFS (ZIP) e as
-    opções "Descriptografar" e "Descriptografar e reconstruir backup".
-C2. Resumo da descriptografia no log (total, gravados, falhas).
+C1. Arquivos de tamanho zero gravados na descriptografia (o original os pula,
+    "cannot mmap an empty file"). Até o commit 5b5653c o Quartzo também trocava
+    a busca por caminho relativo pela busca por fileID, que perdia a cópia dos
+    demais apps quando o mesmo caminho existia em vários; a partir do commit
+    771aead (22/10/2026) o próprio UFADE faz isso. Afeta Logical+ (TAR), PRFS
+    (ZIP) e as opções "Descriptografar" e "Descriptografar e reconstruir backup".
+C2. Resumo da descriptografia no log (total, gravados, falhas e, no PRFS,
+    registros com caminho repetido que o ZIP deixa de fora).
 C3. Interrupção correta do Logical+ quando a senha não é obtida, o operador
     cancela ou o backup falha (antes o motor seguia e gravava um ZIP vazio).
 C4. Senha de backup ocultada no log.
@@ -172,75 +174,54 @@ CORRECOES_UFADE = [
      '                    self.switch_menu("AcqMenu")\n'
      '                return()\n'),
 
-    # C1 - lista de arquivos (Logical+/PRFS)
+    # C1/C2 - decrypt_itunes. Desde o commit 771aead (22/10/2026) o próprio UFADE
+    # percorre o backup pelo fileID de cada registro do Manifest.db, e a lista de
+    # arquivos deixou de precisar de ajuste. Ficam com o Quartzo a gravação dos
+    # arquivos de tamanho zero (o original só registra que os pulou) e o resumo no
+    # log, que agora conta também as entradas repetidas que o PRFS deixa de fora.
     ("ufade.py",
-     '                    line_list = []\n'
-     '                    line_cnt = 0\n'
-     "                    for line in backupfiles['relativePath']:\n"
-     '                        if(line not in line_list):\n'
-     '                            line_cnt += 1\n'
-     '                            line_list.append(line)\n',
-     f'                    line_list = {QC}.lista_backup(backupfiles)  # QUARTZO: um item por registro do Manifest.db\n'
-     '                    line_cnt = len(line_list)\n'),
-    # C1 - lista de arquivos (Descriptografar / Reconstruir backup)
+     '        zip_names = set()\n'
+     '        for file_id in line_list:\n',
+     '        zip_names = set()\n'
+     '        _qz_total = _qz_falhas = _qz_repetidos = 0  # QUARTZO: contagem para o resumo no log\n'
+     '        for file_id in line_list:\n'),
     ("ufade.py",
-     '            line_list = []\n'
-     '            line_cnt = 0\n'
-     "            for line in backupfiles['relativePath']:\n"
-     '                if(line not in line_list):\n'
-     '                    line_cnt += 1\n'
-     '                    line_list.append(line)\n',
-     f'            line_list = {QC}.lista_backup(backupfiles)  # QUARTZO: um item por registro do Manifest.db\n'
-     '            line_cnt = len(line_list)\n'),
-
-    # C1/C2 - decrypt_itunes
-    ("ufade.py",
-     '        for file in line_list:\n'
-     '            fileout = file\n'
-     "            if platform.uname().system == 'Windows':\n",
-     '        _qz_total = len(line_list)  # QUARTZO\n'
-     '        _qz_falhas = 0\n'
-     '        for _qz_id, filedomain, file in line_list:  # QUARTZO: (fileID, domínio, caminho relativo)\n'
-     '            fileout = file\n'
-     "            if platform.uname().system == 'Windows':\n"),
-    ("ufade.py",
-     "            filedomain = backupfiles.loc[backupfiles['relativePath'] == file, 'domain'].iloc[0]\n"
+     "            filedomain = file_rows.at[file_id, 'domain']\n"
      '            try:\n'
-     '                b.getFileDecryptedCopy(relativePath=file, targetName=fileout, targetFolder=os.path.join(".tar_tmp", "itunes_bu"))               #actually decrypt the backup-files\n',
+     '                file_entry = iOSbackupUF.getFileManifestDBEntry_uf(b, fileNameHash=file_id)\n'
+     '                b.getFileDecryptedCopy(manifestEntry=file_entry, targetName=fileout, targetFolder=os.path.join(".tar_tmp", "itunes_bu"))',
+     "            filedomain = file_rows.at[file_id, 'domain']\n"
+     '            _qz_total += 1  # QUARTZO: decifrar() grava também os arquivos de tamanho zero\n'
      '            try:\n'
-     f'                {QC}.decifrar(b, _qz_id, fileout, os.path.join(".tar_tmp", "itunes_bu"))  # QUARTZO: pelo fileID do registro\n'),
+     f'                {QC}.decifrar(b, file_id, fileout, os.path.join(".tar_tmp", "itunes_bu"))'),
     ("ufade.py",
-     "backupfiles.loc[backupfiles['relativePath'] == file, 'domain'].iloc[0], file), recursive=False)",
-     "filedomain, file), recursive=False)  # QUARTZO: domínio do próprio registro"),
+     '                    elif tarfile_path in zip_names:\n'
+     '                        if not os.path.isdir(file_path):\n',
+     '                    elif tarfile_path in zip_names:\n'
+     '                        if not os.path.isdir(file_path):\n'
+     '                            _qz_repetidos += 1  # QUARTZO\n'),
     ("ufade.py",
      '            except Exception as e:\n'
      '                if "cannot mmap an empty file" not in str(e):\n'
      "                    log(f\"Error while decrypting file:{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}\")\n"
+     '                else:\n'
+     "                    log(f\"Skipped backup entry: source blob is empty (cannot mmap); file not extracted: {file.encode('cp1252', errors='ignore').decode('cp1252')}\")\n"
      '        change.set(1)\n'
      '\n'
      "# Decrypt, don't unback\n",
      '            except Exception as e:\n'
-     '                _qz_falhas += 1  # QUARTZO: arquivos vazios agora são gravados; toda falha é registrada\n'
+     '                _qz_falhas += 1  # QUARTZO: os arquivos vazios já são gravados; toda falha é registrada\n'
      "                log(f\"Error while decrypting file:{filedomain}/{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}\")\n"
-     f'        {QC}.resumo_descriptografia(_qz_total, _qz_total - _qz_falhas, _qz_falhas, log)  # QUARTZO\n'
+     f'        {QC}.resumo_descriptografia(_qz_total, _qz_total - _qz_falhas - _qz_repetidos, _qz_falhas, log, _qz_repetidos)  # QUARTZO\n'
      '        change.set(1)\n'
      '\n'
      "# Decrypt, don't unback\n"),
 
-    # C1 - only_decrypt_itunes
+    # C1 - only_decrypt_itunes: arquivos de tamanho zero também são gravados
     ("ufade.py",
-     '        for file in line_list:\n'
-     '            fileout = file\n'
-     '            d_nr += 1\n',
-     '        for _qz_id, _qz_dom, file in line_list:  # QUARTZO: (fileID, domínio, caminho relativo)\n'
-     '            fileout = file\n'
-     '            d_nr += 1\n'),
-    ("ufade.py",
-     "            sha_name = backupfiles.loc[backupfiles['relativePath'] == file, 'backupFile'].iloc[0]\n",
-     '            sha_name = _qz_id  # QUARTZO: o fileID do próprio registro\n'),
-    ("ufade.py",
-     '                b.getFileDecryptedCopy(relativePath=file, targetName=sha_name, targetFolder=target_dir)\n',
-     f'                {QC}.decifrar(b, sha_name, sha_name, target_dir)  # QUARTZO\n'),
+     '                file_entry = iOSbackupUF.getFileManifestDBEntry_uf(b, fileNameHash=sha_name)\n'
+     '                b.getFileDecryptedCopy(manifestEntry=file_entry, targetName=sha_name, targetFolder=target_dir)\n',
+     f'                {QC}.decifrar(b, sha_name, sha_name, target_dir)  # QUARTZO: grava também os arquivos de tamanho zero\n'),
 
     # C11 - Reconstruir/Descriptografar a partir da pasta do .ufd/ZIP UFED
     ("ufade.py",
@@ -404,8 +385,11 @@ AJUSTES = {
     "alex": [
         ("alex.py", "# Licensed under GPLv3 License\n", "# Licensed under GPLv3 License\n{aviso}"),
         ("alex.py", CASO_ORIG, CASO_NOVO),
-        ("alex.py", "def log(text):\n    with open(f\"ALEX_log_{snr}.log\"",
-         LOG_ESPELHO.format(motor="ALEX") + "    with open(f\"ALEX_log_{snr}.log\""),
+        # Desde o commit 742e416 o ALEX só grava o próprio log depois que a pasta de
+        # saída é escolhida; o espelho vem antes dessa verificação, para que o log
+        # da sessão do Quartzo continue registrando tudo desde a abertura do motor.
+        ("alex.py", "def log(text):\n    if not cwd_selected:\n",
+         LOG_ESPELHO.format(motor="ALEX") + "    if not cwd_selected:\n"),
         ("alex.py", SONDA_ORIG, SONDA_NOVA),
     ],
 }

@@ -1693,9 +1693,15 @@ class MyApp(ctk.CTk):
         global b
         global backupfiles
         try:
-            b = iOSbackup(udid=udid, cleartextpassword=bu_pass, derivedkey=None, backuproot=backuproot)                           #Load Backup with Password
-            key = b.getDecryptionKey()                                                                                      #Get decryption Key
-            b = iOSbackup(udid=udid, derivedkey=key, backuproot=backuproot)                                                       #Load Backup again with Key
+            with open(os.path.join(backuproot, udid, "Manifest.plist"), "rb") as mani_in:
+                bu_encrypted = plistlib.load(mani_in).get("IsEncrypted", True)
+            if bu_encrypted:
+                b = iOSbackup(udid=udid, cleartextpassword=bu_pass, derivedkey=None, backuproot=backuproot)                       #Load Backup with Password
+                key = b.getDecryptionKey()                                                                                  #Get decryption Key
+                b = iOSbackup(udid=udid, derivedkey=key, backuproot=backuproot)                                                   #Load Backup again with Key
+            else:
+                log("Backup is not encrypted, the backup password is not used")
+                b = iOSbackup(udid=udid, backuproot=backuproot)                                                                   #Load unencrypted Backup
             backupfiles = pd.DataFrame(b.getBackupFilesList(), columns=['backupFile','domain','name','relativePath'])
             change.set(1)
         except:
@@ -1737,7 +1743,10 @@ class MyApp(ctk.CTk):
             all_apps = []
         log("Starting Backup decryption")
         MIN_TS = time.mktime((1980, 1, 1, 0, 0, 0, 0, 1, -1))
-        for file in line_list:
+        file_rows = backupfiles.set_index('backupFile')
+        zip_names = set()
+        for file_id in line_list:
+            file = file_rows.at[file_id, 'relativePath']
             fileout = file
             if platform.uname().system == 'Windows':
                 fileout = re.sub(r"[?%*:|\"<>\x7F\x00-\x1F]", "-", file)
@@ -1749,9 +1758,12 @@ class MyApp(ctk.CTk):
             prog_text.configure(text=f"{int(dpro)}%")
             progress.update()
             prog_text.update()
-            filedomain = backupfiles.loc[backupfiles['relativePath'] == file, 'domain'].iloc[0]
+            if file == "":
+                continue
+            filedomain = file_rows.at[file_id, 'domain']
             try:
-                b.getFileDecryptedCopy(relativePath=file, targetName=fileout, targetFolder=os.path.join(".tar_tmp", "itunes_bu"))               #actually decrypt the backup-files
+                file_entry = iOSbackupUF.getFileManifestDBEntry_uf(b, fileNameHash=file_id)
+                b.getFileDecryptedCopy(manifestEntry=file_entry, targetName=fileout, targetFolder=os.path.join(".tar_tmp", "itunes_bu"))               #actually decrypt the backup-files
                 file_path = os.path.join('.tar_tmp', 'itunes_bu', fileout)
                 stat = os.stat(file_path)
                 if stat.st_mtime < MIN_TS:
@@ -1792,23 +1804,31 @@ class MyApp(ctk.CTk):
                         m_unback_set.add(tarfile_path.replace("/private/var/mobile/Media", ""))
                     if tarfile_path == "/private/var/mobile/Media":
                         pass
+                    elif tarfile_path in zip_names:
+                        if not os.path.isdir(file_path):
+                            log(f"Skipped duplicate ZIP entry: {tarfile_path.encode('cp1252', errors='ignore').decode('cp1252')} from {filedomain} (already added from another domain)")
                     else:
                         zip.write(file_path, os.path.join(tarpath, file))
+                        zip_names.add(tarfile_path)
                 else:
                     tar.add(file_path, arcname=os.path.join("iTunes_Backup/", 
-                        backupfiles.loc[backupfiles['relativePath'] == file, 'domain'].iloc[0], file), recursive=False)         #add files to the TAR
+                        filedomain, file), recursive=False)         #add files to the TAR
                 try: os.remove(file_path)                                                                                       #remove the file after adding
                 except: pass
             except Exception as e:
                 if "cannot mmap an empty file" not in str(e):
                     log(f"Error while decrypting file:{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}")
+                else:
+                    log(f"Skipped backup entry: source blob is empty (cannot mmap); file not extracted: {file.encode('cp1252', errors='ignore').decode('cp1252')}")
         change.set(1) 
 
 # Decrypt, don't unback
     def only_decrypt_itunes(self, b, backupfiles, progress, prog_text, line_list, line_cnt, d_nr, change, src, folder=None):
         os.makedirs(folder, exist_ok=True)
         log("Starting Backup decryption")
-        for file in line_list:
+        file_rows = backupfiles.set_index('backupFile')
+        for sha_name in line_list:
+            file = file_rows.at[sha_name, 'relativePath']
             fileout = file
             d_nr += 1
             dpro = int(100*(d_nr/line_cnt))
@@ -1816,11 +1836,11 @@ class MyApp(ctk.CTk):
             prog_text.configure(text=f"{int(dpro)}%")
             progress.update()
             prog_text.update()
-            sha_name = backupfiles.loc[backupfiles['relativePath'] == file, 'backupFile'].iloc[0]
             target_dir = os.path.join(folder, sha_name[:2])
             os.makedirs(target_dir, exist_ok=True)
             try:
-                b.getFileDecryptedCopy(relativePath=file, targetName=sha_name, targetFolder=target_dir)
+                file_entry = iOSbackupUF.getFileManifestDBEntry_uf(b, fileNameHash=sha_name)
+                b.getFileDecryptedCopy(manifestEntry=file_entry, targetName=sha_name, targetFolder=target_dir)
             except Exception as e:
                 log(f"Error while decrypting file:{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}")
             
@@ -2098,12 +2118,8 @@ class MyApp(ctk.CTk):
                 self.wait_variable(self.change)
                 if self.change.get() == 1:
                     #get amount of lines (files) of backup
-                    line_list = []
-                    line_cnt = 0
-                    for line in backupfiles['relativePath']:                                                                        
-                        if(line not in line_list):
-                            line_cnt += 1
-                            line_list.append(line)
+                    line_list = list(backupfiles['backupFile'])                                                        #one entry per backup file (fileID), also for paths that exist in several domains
+                    line_cnt = len(line_list)
                     d_nr = 0
                     self.change.set(0)                                                                     
                     if l_type == "PRFS":
@@ -5131,7 +5147,7 @@ class MyApp(ctk.CTk):
         bu_pass = ""
         ctk.CTkLabel(self.dynamic_frame, text=f"UFADE by Christian Peter  -  Output: {dir_top}", text_color="#3f3f3f", height=60, padx=40, font=self.stfont).pack(anchor="w")
         ctk.CTkLabel(self.dynamic_frame, text="Unback Backup", height=60, width=585, font=("standard",24), justify="left").pack(pady=20)
-        self.text = ctk.CTkLabel(self.dynamic_frame, text="Choose an iTunes Backup directory (encrypted) and\nprovide the correct Backup Password:", width=585, height=40, font=self.stfont, anchor="w", justify="left")
+        self.text = ctk.CTkLabel(self.dynamic_frame, text="Choose an iTunes Backup directory and provide the\ncorrect Backup Password (if the backup is encrypted):", width=585, height=40, font=self.stfont, anchor="w", justify="left")
         self.text.pack(anchor="center", pady=25)
         self.backup_text = ctk.CTkLabel(self.dynamic_frame, text="Chosen Backup:    < no backup chosen >", width=585, height=20, font=self.stfont, anchor="w", justify="left")
         self.backup_text.pack(anchor="center", pady= 5)
@@ -5265,12 +5281,8 @@ class MyApp(ctk.CTk):
             self.progress = ctk.CTkProgressBar(self.dynamic_frame, width=585, height=30, corner_radius=0)
             self.progress.set(0)
             self.progress.pack()
-            line_list = []
-            line_cnt = 0
-            for line in backupfiles['relativePath']:                                                                        
-                if(line not in line_list):
-                    line_cnt += 1
-                    line_list.append(line)
+            line_list = list(backupfiles['backupFile'])                                                        #one entry per backup file (fileID), also for paths that exist in several domains
+            line_cnt = len(line_list)
             d_nr = 0
             self.change.set(0)
             if dec_type == "unback":                                                                    
@@ -6526,7 +6538,7 @@ case_number = ""
 case_name = ""
 evidence_number = ""
 examiner = ""
-u_version = "1.0.4"
+u_version = "1.0.5"
 
 
 

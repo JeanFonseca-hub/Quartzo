@@ -101,7 +101,11 @@ def main():
     import traduzir
     offline = "--offline" in sys.argv
     arq_origem = os.path.join(RAIZ, "upstream", "ORIGEM.json")
-    origem = json.load(open(arq_origem, encoding="utf-8")) if os.path.exists(arq_origem) else {}
+    origem_antes = None  # conteúdo original do ORIGEM.json, para devolver se a atualização falhar
+    if os.path.exists(arq_origem):
+        with open(arq_origem, "rb") as fh:
+            origem_antes = fh.read()
+    origem = json.loads(origem_antes.decode("utf-8")) if origem_antes else {}
     tmp = tempfile.mkdtemp(prefix="quartzo_sync_")
     trocados = []  # originais substituídos em upstream/; a versão anterior fica em upstream/_<nome>_anterior
     gerados = []   # (motor, pasta de trabalho) já montados e ainda não instalados
@@ -122,6 +126,10 @@ def main():
                 shutil.copytree(pasta, dest, ignore=shutil.ignore_patterns(".git"))
                 origem.setdefault(nome, {}).update({"repositorio": url, "commit": commit,
                                                     "data_commit": data, "obtido_em": date.today().isoformat()})
+            # O aviso no cabeçalho dos motores cita o commit lido do ORIGEM.json; por
+            # isso ele é gravado antes da geração (e volta ao que era se algo falhar).
+            with open(arq_origem, "w", encoding="utf-8", newline="") as fh:  # LF, como no repositório
+                json.dump(origem, fh, indent=2, ensure_ascii=False)
         # Os dois motores são montados antes de qualquer troca: se um falhar,
         # nenhum dos dois muda.
         for motor in ("ufade", "alex"):
@@ -131,6 +139,9 @@ def main():
     except BaseException:
         for motor, _ in gerados:
             traduzir.descartar(motor)
+        if not offline and origem_antes is not None:
+            with open(arq_origem, "wb") as fh:
+                fh.write(origem_antes)
         falhas = restaurar_upstream(trocados)
         if falhas:
             print("\nAtualização interrompida. Os motores em uso não foram alterados, mas upstream/ não voltou "
@@ -151,9 +162,6 @@ def main():
             apagar(os.path.join(RAIZ, "upstream", f"_{nome}_anterior"))
         except OSError as erro:
             print(f"Aviso: não foi possível apagar upstream/_{nome}_anterior ({erro}); apague-a à mão.")
-    if not offline:
-        with open(arq_origem, "w", encoding="utf-8") as fh:
-            json.dump(origem, fh, indent=2, ensure_ascii=False)
     for motor, trabalho in gerados:
         traduzir.instalar(motor, trabalho)
         traduzir.cmd_relatorio(motor)

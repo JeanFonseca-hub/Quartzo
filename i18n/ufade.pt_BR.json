@@ -246,7 +246,7 @@
   "Unmount not possible on devices with iOS < 14.0.\\nReboot the device to unmount the image. ": "Não é possível desmontar em iOS < 14.0.\\nReinicie o aparelho para desmontar a imagem. ",
   "Uh-Oh, An error was raised! Check the file:\\nufade_log_{udid}.log": "Ocorreu um erro! Consulte o arquivo:\\nufade_log_{udid}.log",
   "Unback Backup": "Reconstruir backup",
-  "Choose an iTunes Backup directory (encrypted) and\\nprovide the correct Backup Password:": "Escolha a pasta de um backup iTunes (criptografado)\\ne informe a senha correta:",
+  "Choose an iTunes Backup directory and provide the\\ncorrect Backup Password (if the backup is encrypted):": "Escolha a pasta de um backup iTunes e informe a\\nsenha correta (se o backup for criptografado):",
   "Decrypt": "Descriptografar",
   "Chosen Backup: \\n\\n": "Backup escolhido: \\n\\n",
   "Dev-Name: ": "Nome: ",

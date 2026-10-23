@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 # QUARTZO: arquivo MODIFICADO em relação ao original de Christian Peter.
 # Modificações geradas por ferramentas/traduzir.py e ferramentas/integrar.py
-# sobre o commit 5b5653cda08c do original (2026-10-14): textos de interface e de
+# sobre o commit c39a3b27bfac do original (2026-10-23): textos de interface e de
 # relatório PDF traduzidos para pt-BR; dados do caso lidos do lançador; log
 # espelhado na sessão Quartzo; sonda de progresso (quartzo_progresso.py) para
 # a janela de acompanhamento; no motor iOS, correções de falhas da extração
@@ -1711,9 +1711,15 @@ class MyApp(ctk.CTk):
         global b
         global backupfiles
         try:
-            b = iOSbackup(udid=udid, cleartextpassword=bu_pass, derivedkey=None, backuproot=backuproot)                           #Load Backup with Password
-            key = b.getDecryptionKey()                                                                                      #Get decryption Key
-            b = iOSbackup(udid=udid, derivedkey=key, backuproot=backuproot)                                                       #Load Backup again with Key
+            with open(os.path.join(backuproot, udid, "Manifest.plist"), "rb") as mani_in:
+                bu_encrypted = plistlib.load(mani_in).get("IsEncrypted", True)
+            if bu_encrypted:
+                b = iOSbackup(udid=udid, cleartextpassword=bu_pass, derivedkey=None, backuproot=backuproot)                       #Load Backup with Password
+                key = b.getDecryptionKey()                                                                                  #Get decryption Key
+                b = iOSbackup(udid=udid, derivedkey=key, backuproot=backuproot)                                                   #Load Backup again with Key
+            else:
+                log("Backup is not encrypted, the backup password is not used")
+                b = iOSbackup(udid=udid, backuproot=backuproot)                                                                   #Load unencrypted Backup
             backupfiles = pd.DataFrame(b.getBackupFilesList(), columns=['backupFile','domain','name','relativePath'])
             change.set(1)
         except:
@@ -1755,9 +1761,11 @@ class MyApp(ctk.CTk):
             all_apps = []
         log("Starting Backup decryption")
         MIN_TS = time.mktime((1980, 1, 1, 0, 0, 0, 0, 1, -1))
-        _qz_total = len(line_list)  # QUARTZO
-        _qz_falhas = 0
-        for _qz_id, filedomain, file in line_list:  # QUARTZO: (fileID, domínio, caminho relativo)
+        file_rows = backupfiles.set_index('backupFile')
+        zip_names = set()
+        _qz_total = _qz_falhas = _qz_repetidos = 0  # QUARTZO: contagem para o resumo no log
+        for file_id in line_list:
+            file = file_rows.at[file_id, 'relativePath']
             fileout = file
             if platform.uname().system == 'Windows':
                 fileout = re.sub(r"[?%*:|\"<>\x7F\x00-\x1F]", "-", file)
@@ -1769,8 +1777,12 @@ class MyApp(ctk.CTk):
             prog_text.configure(text=f"{int(dpro)}%")
             progress.update()
             prog_text.update()
+            if file == "":
+                continue
+            filedomain = file_rows.at[file_id, 'domain']
+            _qz_total += 1  # QUARTZO: decifrar() grava também os arquivos de tamanho zero
             try:
-                quartzo_correcoes.decifrar(b, _qz_id, fileout, os.path.join(".tar_tmp", "itunes_bu"))  # QUARTZO: pelo fileID do registro
+                quartzo_correcoes.decifrar(b, file_id, fileout, os.path.join(".tar_tmp", "itunes_bu"))               #actually decrypt the backup-files
                 file_path = os.path.join('.tar_tmp', 'itunes_bu', fileout)
                 stat = os.stat(file_path)
                 if stat.st_mtime < MIN_TS:
@@ -1811,24 +1823,31 @@ class MyApp(ctk.CTk):
                         m_unback_set.add(tarfile_path.replace("/private/var/mobile/Media", ""))
                     if tarfile_path == "/private/var/mobile/Media":
                         pass
+                    elif tarfile_path in zip_names:
+                        if not os.path.isdir(file_path):
+                            _qz_repetidos += 1  # QUARTZO
+                            log(f"Skipped duplicate ZIP entry: {tarfile_path.encode('cp1252', errors='ignore').decode('cp1252')} from {filedomain} (already added from another domain)")
                     else:
                         zip.write(file_path, os.path.join(tarpath, file))
+                        zip_names.add(tarfile_path)
                 else:
                     tar.add(file_path, arcname=os.path.join("iTunes_Backup/", 
-                        filedomain, file), recursive=False)  # QUARTZO: domínio do próprio registro         #add files to the TAR
+                        filedomain, file), recursive=False)         #add files to the TAR
                 try: os.remove(file_path)                                                                                       #remove the file after adding
                 except: pass
             except Exception as e:
-                _qz_falhas += 1  # QUARTZO: arquivos vazios agora são gravados; toda falha é registrada
+                _qz_falhas += 1  # QUARTZO: os arquivos vazios já são gravados; toda falha é registrada
                 log(f"Error while decrypting file:{filedomain}/{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}")
-        quartzo_correcoes.resumo_descriptografia(_qz_total, _qz_total - _qz_falhas, _qz_falhas, log)  # QUARTZO
+        quartzo_correcoes.resumo_descriptografia(_qz_total, _qz_total - _qz_falhas - _qz_repetidos, _qz_falhas, log, _qz_repetidos)  # QUARTZO
         change.set(1)
 
 # Decrypt, don't unback
     def only_decrypt_itunes(self, b, backupfiles, progress, prog_text, line_list, line_cnt, d_nr, change, src, folder=None):
         os.makedirs(folder, exist_ok=True)
         log("Starting Backup decryption")
-        for _qz_id, _qz_dom, file in line_list:  # QUARTZO: (fileID, domínio, caminho relativo)
+        file_rows = backupfiles.set_index('backupFile')
+        for sha_name in line_list:
+            file = file_rows.at[sha_name, 'relativePath']
             fileout = file
             d_nr += 1
             dpro = int(100*(d_nr/line_cnt))
@@ -1836,11 +1855,10 @@ class MyApp(ctk.CTk):
             prog_text.configure(text=f"{int(dpro)}%")
             progress.update()
             prog_text.update()
-            sha_name = _qz_id  # QUARTZO: o fileID do próprio registro
             target_dir = os.path.join(folder, sha_name[:2])
             os.makedirs(target_dir, exist_ok=True)
             try:
-                quartzo_correcoes.decifrar(b, sha_name, sha_name, target_dir)  # QUARTZO
+                quartzo_correcoes.decifrar(b, sha_name, sha_name, target_dir)  # QUARTZO: grava também os arquivos de tamanho zero
             except Exception as e:
                 log(f"Error while decrypting file:{file.encode('cp1252', errors='ignore').decode('cp1252')} - {e}")
             
@@ -2122,7 +2140,7 @@ class MyApp(ctk.CTk):
                 self.wait_variable(self.change)
                 if self.change.get() == 1:
                     #get amount of lines (files) of backup
-                    line_list = quartzo_correcoes.lista_backup(backupfiles)  # QUARTZO: um item por registro do Manifest.db
+                    line_list = list(backupfiles['backupFile'])                                                        #one entry per backup file (fileID), also for paths that exist in several domains
                     line_cnt = len(line_list)
                     d_nr = 0
                     self.change.set(0)                                                                     
@@ -5152,7 +5170,7 @@ class MyApp(ctk.CTk):
         bu_pass = ""
         ctk.CTkLabel(self.dynamic_frame, text=f"UFADE por Christian Peter  -  Saída: {dir_top}", text_color="#3f3f3f", height=60, padx=40, font=self.stfont).pack(anchor="w")
         ctk.CTkLabel(self.dynamic_frame, text="Reconstruir backup", height=60, width=585, font=("standard",24), justify="left").pack(pady=20)
-        self.text = ctk.CTkLabel(self.dynamic_frame, text="Escolha a pasta de um backup iTunes (criptografado)\ne informe a senha correta:", width=585, height=40, font=self.stfont, anchor="w", justify="left")
+        self.text = ctk.CTkLabel(self.dynamic_frame, text="Escolha a pasta de um backup iTunes e informe a\nsenha correta (se o backup for criptografado):", width=585, height=40, font=self.stfont, anchor="w", justify="left")
         self.text.pack(anchor="center", pady=25)
         self.backup_text = ctk.CTkLabel(self.dynamic_frame, text="Backup escolhido:    < nenhum >", width=585, height=20, font=self.stfont, anchor="w", justify="left")
         self.backup_text.pack(anchor="center", pady= 5)
@@ -5304,7 +5322,7 @@ class MyApp(ctk.CTk):
             self.progress = ctk.CTkProgressBar(self.dynamic_frame, width=585, height=30, corner_radius=0)
             self.progress.set(0)
             self.progress.pack()
-            line_list = quartzo_correcoes.lista_backup(backupfiles)  # QUARTZO: um item por registro do Manifest.db
+            line_list = list(backupfiles['backupFile'])                                                        #one entry per backup file (fileID), also for paths that exist in several domains
             line_cnt = len(line_list)
             d_nr = 0
             self.change.set(0)
@@ -6580,7 +6598,7 @@ case_number = os.environ.get("QUARTZO_CASO_NUMERO", "")  # QUARTZO
 case_name = os.environ.get("QUARTZO_CASO_NOME", "")  # QUARTZO
 evidence_number = os.environ.get("QUARTZO_EVIDENCIA", "")  # QUARTZO
 examiner = os.environ.get("QUARTZO_EXAMINADOR", "")  # QUARTZO
-u_version = "1.0.4"
+u_version = "1.0.5"
 
 
 

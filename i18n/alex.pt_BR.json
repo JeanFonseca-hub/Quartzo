@@ -273,6 +273,8 @@
  },
  "nao_traduzir_cmp": [],
  "manter_em_ingles": [
+  "command",
+  "command (adbutils equivalent)",
   "Python: ",
   "adbutils: ",
   "fastboot: ",

@@ -52,26 +52,19 @@ class BackupFalso:
         return {"lastModified": datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)}
 
 
-class TesteListaBackup(unittest.TestCase):
-    def test_mantem_caminhos_repetidos_em_dominios_diferentes(self):
-        bf = {"backupFile": ["a1", "b2", "c3", "d4"],
-              "domain": ["AppDomain-x", "AppDomain-y", "HomeDomain", "AppDomain-y"],
-              "relativePath": ["Library/Cookies/Cookies.binarycookies", "Library/Cookies/Cookies.binarycookies",
-                               "", "Library/Preferences/y.plist"]}
-        lista = qc.lista_backup(bf)
-        self.assertEqual(lista, [("a1", "AppDomain-x", "Library/Cookies/Cookies.binarycookies"),
-                                 ("b2", "AppDomain-y", "Library/Cookies/Cookies.binarycookies"),
-                                 ("d4", "AppDomain-y", "Library/Preferences/y.plist")])
+class TesteResumo(unittest.TestCase):
+    def test_sem_repetidos(self):
+        log = []
+        qc.resumo_descriptografia(1200, 1198, 2, log.append)
+        self.assertIn("1,198 de 1,200", log[0])
+        self.assertIn("2 falha(s)", log[0])
+        self.assertNotIn("Skipped duplicate", log[0])
 
-    def test_dataframe(self):
-        try:
-            import pandas as pd
-        except ImportError:
-            self.skipTest("pandas ausente")
-        df = pd.DataFrame([{"backupFile": "a", "domain": "D1", "name": "x", "relativePath": "p"},
-                           {"backupFile": "b", "domain": "D2", "name": "x", "relativePath": "p"}],
-                          columns=["backupFile", "domain", "name", "relativePath"])
-        self.assertEqual(len(qc.lista_backup(df)), 2)
+    def test_com_repetidos_do_prfs(self):
+        log = []
+        qc.resumo_descriptografia(1200, 1195, 2, log.append, 3)
+        self.assertIn("1,195 de 1,200", log[0])
+        self.assertIn("3 registro(s) com caminho já presente no ZIP", log[0])
 
 
 class TesteDecifrar(unittest.TestCase):

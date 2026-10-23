@@ -79,6 +79,7 @@ class TesteAtualizacao(unittest.TestCase):
 
     def test_falha_na_geracao_devolve_os_dois_originais(self):
         def falha(motor, verbose=True):
+            self.assertEqual(json.loads(ler(self.origem_json))["UFADE"]["commit"], "c" * 40)
             raise SystemExit("ERRO de integração: trecho esperado não encontrado")
         with mock.patch.object(sincronizar, "baixar", self.baixar_falso), \
                 mock.patch.object(traduzir, "gerar", falha), \
@@ -112,7 +113,9 @@ class TesteAtualizacao(unittest.TestCase):
         trabalhos = []
 
         def gerar_falso(motor, verbose=True):
-            trabalhos.append(motor)
+            # o aviso do cabeçalho do motor é montado a partir do ORIGEM.json lido aqui
+            commit = json.loads(ler(self.origem_json))["UFADE"]["commit"]
+            trabalhos.append((motor, commit))
             return os.path.join(self.dir, motor), {}
         with mock.patch.object(sincronizar, "baixar", self.baixar_falso), \
                 mock.patch.object(traduzir, "gerar", gerar_falso), \
@@ -120,7 +123,7 @@ class TesteAtualizacao(unittest.TestCase):
                 mock.patch.object(traduzir, "cmd_relatorio", lambda motor: None), \
                 mock.patch.object(sincronizar.subprocess, "run", lambda *a, **k: None):
             sincronizar.main()
-        self.assertEqual(trabalhos, ["ufade", "alex"])
+        self.assertEqual(trabalhos, [("ufade", "c" * 40), ("alex", "c" * 40)])
         self.assertEqual(self.conteudo("UFADE"), "UFADE novo\n")
         self.assertEqual(sorted(os.listdir(self.upstream)), ["ALEX", "ORIGEM.json", "UFADE"])
         for nome in ("UFADE", "ALEX"):

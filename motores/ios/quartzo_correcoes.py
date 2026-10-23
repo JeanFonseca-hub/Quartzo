@@ -61,38 +61,15 @@ def hashes_arquivo(caminho):
     return md5.hexdigest(), sha1.hexdigest(), sha256.hexdigest()
 
 
-# ------------------------------------------- lista de arquivos do backup
-def lista_backup(backupfiles):
-    """Lista (fileID, domínio, caminho relativo) de TODOS os registros do
-    Manifest.db, na ordem do catálogo (domínio, caminho).
-
-    O motor original percorria só os caminhos relativos distintos e tomava o
-    primeiro domínio de cada um; quando o mesmo caminho existia em mais de um
-    app (por exemplo Library/Cookies/Cookies.binarycookies), só a cópia do
-    primeiro app era gravada. Aqui cada registro é tratado pelo seu fileID,
-    que é único. Os registros de raiz de domínio (caminho vazio) não são
-    arquivos e ficam de fora.
-    """
-    vistos = set()
-    saida = []
-    for fid, dominio, rel in zip(backupfiles["backupFile"], backupfiles["domain"], backupfiles["relativePath"]):
-        if not rel or fid in vistos:
-            continue
-        vistos.add(fid)
-        saida.append((fid, dominio, rel))
-    return saida
-
-
+# ------------------------------------------------ descriptografia do backup
 def decifrar(b, file_id, nome_destino, pasta_destino):
     """Descriptografa o registro `file_id` do backup para pasta_destino/nome_destino.
 
-    Diferenças em relação à chamada original getFileDecryptedCopy(relativePath=...):
-    1. localiza o registro pelo fileID (único), e não pelo caminho relativo, que
-       se repete entre domínios e quebrava a consulta SQL quando continha apóstrofo;
-    2. cria as pastas intermediárias;
-    3. grava os arquivos de tamanho zero, que o original descartava em silêncio
-       ("cannot mmap an empty file").
-    Retorna o caminho gravado.
+    O registro é localizado pelo fileID, que é único (o caminho relativo se repete
+    entre domínios). Em relação ao motor original, a diferença que resta é que os
+    arquivos de tamanho zero são gravados: o original não consegue abri-los
+    ("cannot mmap an empty file") e só registra que os pulou. As pastas
+    intermediárias são criadas aqui. Retorna o caminho gravado.
     """
     entrada = b.getFileManifestDBEntry(fileNameHash=file_id)
     destino = os.path.join(pasta_destino, nome_destino)
@@ -118,9 +95,16 @@ def decifrar(b, file_id, nome_destino, pasta_destino):
     return destino
 
 
-def resumo_descriptografia(total, gravados, falhas, log):
-    log(f"Backup decryption finished: {gravados:,} de {total:,} registros do Manifest.db gravados; "
-        f"{falhas:,} falha(s). As falhas, se houver, estão listadas acima como 'Error while decrypting file'.")
+def resumo_descriptografia(total, gravados, falhas, log, repetidos=0):
+    """Registra no log o balanço da descriptografia. `repetidos` são os registros
+    que o PRFS deixa de fora porque o mesmo caminho do aparelho já entrou no ZIP
+    a partir de outro domínio (o motor lista cada um como 'Skipped duplicate ZIP entry')."""
+    texto = (f"Backup decryption finished: {gravados:,} de {total:,} registros do Manifest.db gravados; "
+             f"{falhas:,} falha(s).")
+    if repetidos:
+        texto += (f" {repetidos:,} registro(s) com caminho já presente no ZIP ficaram de fora "
+                  "(listados acima como 'Skipped duplicate ZIP entry').")
+    log(texto + " As falhas, se houver, estão listadas acima como 'Error while decrypting file'.")
 
 
 # ------------------------------------------------ backup a partir do ZIP UFED
